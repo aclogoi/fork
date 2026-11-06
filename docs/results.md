@@ -53,3 +53,11 @@ A fork survives the floor if any alternative reading has at least that prior.
 The proposer's prior is a strictness dial. No setting clears both bars at once: the permissive end gives 13% flip at 42% noise, the strict end gives 8% flip at 27% noise. The honest launch framing is a pair of numbers at two strictness levels, with the human-labelled noise rate next to each.
 
 The judge is also the weak instrument here. Several forks it rejected are the kind a reviewer would want surfaced (blue eyes including 'Yellow/Blue'; 'names' as superhero name vs real name; 'September Meeting' vs all September events). The 50-fork human label sheet from run 2 settles whether the judge is too strict: `eval/bird/out/run2_sample300_seed0.labels.csv`.
+
+### Recall analysis, run 2
+
+Of 79 wrong answers that differ from gold by value or row count, Fork caught 4. Reading the other 75:
+
+- **Duplicate handling dominates.** `SELECT DISTINCT` vs not, `COUNT(x)` vs `COUNT(DISTINCT x)`, `LIKE '%Flying%'` vs `= 'Flying'` on comma-separated columns, and ties under `LIMIT 1` account for roughly a third of them (questions 210, 343, 354, 376, 406, 444, 448, 452, 483, 681, 802, 805 in the sample). This is the "duplicates and boundaries" reading kind deferred from v0; it is the largest single recall lever left.
+- **BIRD evidence thresholds.** "Positive comment refers to score > 60", "elder user refers to Age > 65", "teenage is 13 to 18". No reading of the schema recovers an arbitrary threshold; these are irreducible without the hint and should be excluded from the catch denominator in the write-up.
+- **Join path and aggregation shape.** Different join routes (postHistory vs posts), percentage formulas, LEFT vs INNER join. Out of scope for a reading checker.
