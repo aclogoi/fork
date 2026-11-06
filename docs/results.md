@@ -111,3 +111,36 @@ The catch column here compares summarised answers and understates the exact figu
 At a floor of 0.25 both gate bars clear on the judge's numbers: flip above 15%, noise under a third. That is now the default `min_prior`. Run 5 measures it directly rather than by post-filtering run 4.
 
 Rejected forks a reviewer might still want: 'Business' matching 'Business Administration' (prior 0.45), blue eyes including 'Yellow / Blue' (0.22). The human label sheet for run 4 is `eval/bird/out/run4_sample300_seed0.labels.csv`.
+
+## Run 5, 6 Nov 2026 (prior floor 0.25, the new default)
+
+Same code as run 4 with the default floor raised to 0.25, measured directly.
+
+| metric | value |
+|---|---|
+| flip rate | 17.1% (51/299) |
+| flip rate on wrong answers | 24.6% |
+| flip rate on right answers | 12.4% |
+| catch rate, strict | 8.8% (10/114) |
+| catch rate, strict, on value or row-count mismatches only | 12.7% |
+| catch rate, loose | 11.4% |
+| noise rate, LLM judge | 37.5% (9/24) |
+| forks by kind | duplicates 22, value_literal 21, column_choice 12 |
+| dependencies surviving the LLM gate, mean per question | 0.37 |
+| mean check time | 2.0 s |
+
+Against the plan's thresholds: flip rate clears 15%. Noise is 9 of 24 on the judge, just above the one-third bar; the run-4 post-filter at the same floor was 6 of 24. At this sample size the judge's verdict on three forks separates the two readings, so the human label sheet decides: `eval/bird/out/run5_sample300_seed0.labels.csv`.
+
+The nine rejected forks: two tie expansions on "7th highest" / "333rd highest" questions (`LIMIT 1 OFFSET n`, where the alternative returns every row tied at that rank), two added DISTINCTs on list questions, two `LIKE`-contains readings ('Business' covering 'Business Administration' at prior 0.5; blue eyes covering 'Yellow / Blue'), one column substitution, one code set, one cross-table id reading. The two `LIKE` readings are the kind a reviewer would want surfaced.
+
+Across runs 2 to 5 the duplicates kind moved strict catch from 4 to 10 wrong answers at the stricter floor, and from 4 to 11 at the old one.
+
+### Summary across runs (299-question sample)
+
+| run | change | floor | flip | noise (judge) | catch strict |
+|---|---|---|---|---|---|
+| 1 | first measurement | 0.15 | 14.4% | 50% | 1.8% |
+| 2 | tuned proposer, date columns, dropped filters | 0.20 | 13.0% | 42% | 3.5% |
+| 3 | duplicates kind, both DISTINCT directions | 0.20 | 30.8% | 57% | 13.2% |
+| 4 | no DISTINCT removal, same-row ties collapse | 0.20 | 24.4% | 46% | 9.6% |
+| 5 | run 4 code at floor 0.25 | 0.25 | 17.1% | 38% | 8.8% |

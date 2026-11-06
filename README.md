@@ -74,7 +74,7 @@ exposes one tool, `check_sql(question, sql)`, that returns the report as markdow
    - *value literal*: `status = 'C'` where the codes are undocumented, where the literal matches nothing in the column, or where cells hold several values (`keywords = 'Flying'` versus `LIKE '%Flying%'`);
    - *column choice*: the agent picked `balance` where the table also has `current_balance`;
    - *null handling*: `status != 'D'` silently drops NULL rows, `AVG(x)` ignores NULLs, `COUNT(col)` versus `COUNT(*)`;
-   - *duplicates*: `SELECT DISTINCT` or not, `COUNT(col)` versus `COUNT(DISTINCT col)`, and `ORDER BY x LIMIT 1` versus every row tied for first.
+   - *duplicates*: a list that should perhaps be `DISTINCT`, `COUNT(col)` versus `COUNT(DISTINCT col)`, and `ORDER BY x LIMIT 1` versus every row tied for first.
    One LLM call then decides which alternatives are plausible readings of the *question*, adjusts priors, and adds readings the heuristics cannot see (a code set that means "nonperforming").
 3. **Branch.** The query is rewritten once per alternative reading and run. Pass one switches one reading at a time; pass two runs every combination of the forked readings when there are at most 16.
 4. **Compare.** Final answers are compared as row multisets with numeric tolerance. A reading that changes the answer is a fork; the rest collapse.
