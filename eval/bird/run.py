@@ -62,6 +62,44 @@ def judge_fork(llm, q: dict, f: dict, baseline_sql: str) -> dict:
         return {"plausible": None, "reason": f"judge failed: {e}"}
 
 
+def loose_catch(rep, gold_sql: str, baseline_sql: str) -> bool:
+    """Did some fork name a column or literal that the gold SQL uses and the baseline does not?"""
+    g, bl = gold_sql.lower(), baseline_sql.lower()
+    for f in rep.forks:
+        for r in f.dependency.alternatives:
+            rw = r.rewrite
+            tokens = []
+            if rw.type == "replace_column" and rw.column:
+                tokens.append(rw.column.lower())
+            if rw.type == "replace_literal" and rw.value is not None:
+                tokens.append(f"'{str(rw.value).lower()}'")
+            if rw.type == "literal_set":
+                tokens += [f"'{str(v).lower()}'" for v in rw.values or []]
+            if rw.type == "drop_predicate":
+                col = f.dependency.column.lower()
+                if col in bl and col not in g:
+                    return True
+            for t in tokens:
+                if t in g and t not in bl:
+                    return True
+    return False
+
+
+def classify_mismatch(gold_rows, base_rows) -> str:
+    """Why a wrong baseline answer differs from gold: shape or values."""
+    if results_equal(gold_rows, base_rows):
+        return "equal"
+    if not base_rows:
+        return "baseline_empty"
+    if not gold_rows:
+        return "gold_empty"
+    if len(gold_rows[0]) != len(base_rows[0]):
+        return "column_count"
+    if len(gold_rows) != len(base_rows):
+        return "row_count"
+    return "values"
+
+
 def process(q: dict, b: dict, llm, judge, timeout: float) -> dict:
     db = Database.connect(db_path(q["db_id"]))
     row = {"question_id": q["question_id"], "db_id": q["db_id"], "question": q["question"], "difficulty": q.get("difficulty"),
@@ -94,6 +132,8 @@ def process(q: dict, b: dict, llm, judge, timeout: float) -> dict:
         if br.ok and gold_rows is not None and results_equal(gold_rows, br.rows):
             caught = True
     row["caught"] = caught
+    row["caught_loose"] = loose_catch(rep, q["SQL"], b["sql"])
+    row["mismatch"] = classify_mismatch(gold_rows, rep.base.rows) if rep.base.ok and gold_rows is not None else None
     d = to_dict(rep)
     row["forks"] = d["forks"]
     row["collapsed"] = [c["detail"] for c in d["collapsed"]]
@@ -154,6 +194,10 @@ def summarize_run(out: Path) -> dict:
         "flip_rate_on_wrong": round(sum(1 for r in wrong if r["flipped"]) / len(wrong), 3) if wrong else None,
         "flip_rate_on_right": round(sum(1 for r in right if r["flipped"]) / len(right), 3) if right else None,
         "catch_rate": round(len(caught) / len(wrong), 3) if wrong else None,
+        "catch_rate_loose": round(sum(1 for r in wrong if r.get("caught_loose")) / len(wrong), 3) if wrong else None,
+        "wrong_by_mismatch": dict(sorted(__import__("collections").Counter(r.get("mismatch") for r in wrong).items(), key=lambda kv: -kv[1])),
+        "catch_rate_on_value_mismatch": (round(sum(1 for r in wrong if r.get("mismatch") in ("values", "row_count") and r["caught"]) / max(1, sum(1 for r in wrong if r.get("mismatch") in ("values", "row_count"))), 3)),
+        "catch_rate_loose_on_value_mismatch": (round(sum(1 for r in wrong if r.get("mismatch") in ("values", "row_count") and r.get("caught_loose")) / max(1, sum(1 for r in wrong if r.get("mismatch") in ("values", "row_count"))), 3)),
         "noise_rate_llm_judge": round(len(implausible) / len(judged), 3) if judged else None,
         "forks_judged_on_right": len(judged), "forks_on_right": forks_on_right,
         "mean_dependencies": round(sum(r["n_dependencies"] for r in usable) / n, 2) if n else None,

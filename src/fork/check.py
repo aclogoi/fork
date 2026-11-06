@@ -23,7 +23,7 @@ def check(
     evidence: bool = True,
     interactions: bool = True,
     timeout: float = 30.0,
-    min_prior: float = 0.15,
+    min_prior: float = 0.2,
 ) -> Report:
     """Check an agent's SQL for readings its answer depends on.
 

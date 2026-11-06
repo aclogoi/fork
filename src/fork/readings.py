@@ -81,10 +81,13 @@ def heuristic_dependencies(pq: ParsedQuery, db: Database) -> list[Dependency]:
                 continue
             if other in table.primary_key or any(other == fk[0] for fk in table.foreign_keys):
                 continue
+            otc = type_class(oty, None)
             sim = _name_similarity(site.column, other)
+            if tc == "date" and otc == "date":
+                sim = max(sim, 0.34)  # two date columns in one table are always a choice
             if sim < 0.34:
                 continue
-            if type_class(oty, None) != tc and tc != "text":
+            if otc != tc and tc != "text":
                 continue
             cands.append((sim, other))
         if not cands:
@@ -223,7 +226,7 @@ You may also add alternatives the heuristics missed, restricted to these rewrite
 - drop_predicate: the question's term does not restrict rows at all; the agent turned a descriptive phrase into a filter the question did not ask for, or filtered on a code when the question meant every row
 And you may add new column_choice dependencies for columns the query uses when a sibling column in the same table is a plausible referent of the question's wording.
 
-Priors are rough probabilities that the question meant that reading; they need not sum to one. Keep at most 2 alternatives per dependency. Omit any alternative you would give a prior below 0.15: listing it is the same as calling it implausible, and a hedged alternative ('the question says X, but...') is not an alternative. Drop every dependency whose agent reading is clearly the only plausible one by returning it with an empty alternatives list. Look hardest at undocumented codes (single letters, abbreviations, flags) whose meaning the question's wording does not pin down, and at qualifiers in the question that the agent may have mapped to the wrong code or column."""
+Priors are rough probabilities that the question meant that reading; they need not sum to one. Keep at most 2 alternatives per dependency. Omit any alternative you would give a prior below 0.2: listing it is the same as calling it implausible, and a hedged alternative ('the question says X, but...') is not an alternative. Never propose that a code means the opposite of its conventional reading ('+' meaning negative, 'F' meaning not-full) unless the evidence rows support it. Do propose: a code set when a question's term plausibly spans several codes; a sibling column when the question's wording fits it as well as the agent's; a dropped filter when the agent turned a descriptive phrase into a predicate. Drop every dependency whose agent reading is clearly the only plausible one by returning it with an empty alternatives list. Look hardest at undocumented codes (single letters, abbreviations, flags) whose meaning the question's wording does not pin down, and at qualifiers in the question that the agent may have mapped to the wrong code or column."""
 
 LLM_SCHEMA = {
     "type": "object",
@@ -302,7 +305,7 @@ def llm_prompt(question: str, sql: str, deps: list[Dependency], pq: ParsedQuery,
     return "\n".join(lines)
 
 
-MIN_PRIOR = 0.15
+MIN_PRIOR = 0.2
 
 
 def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db: Database, min_prior: float = MIN_PRIOR) -> list[Dependency]:

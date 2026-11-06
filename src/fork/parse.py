@@ -248,5 +248,12 @@ _TOKEN_RE = re.compile(r"[A-Za-z]+|\d+")
 
 def name_tokens(name: str) -> set[str]:
     s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
-    toks = {t.lower() for t in _TOKEN_RE.findall(s)}
+    toks = {_stem(t.lower()) for t in _TOKEN_RE.findall(s)}
     return toks - {"id", "the", "of", "a"}
+
+
+def _stem(t: str) -> str:
+    """types -> type, names -> name; leaves short and -ss words alone."""
+    if len(t) > 3 and t.endswith("s") and not t.endswith("ss"):
+        return t[:-1]
+    return t
