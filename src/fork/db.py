@@ -59,7 +59,7 @@ class Database:
     # ---- construction -------------------------------------------------
 
     @classmethod
-    def connect(cls, target: Any) -> "Database":
+    def connect(cls, target: Any) -> Database:
         if isinstance(target, Database):
             return target
         if isinstance(target, sqlite3.Connection):

@@ -1,4 +1,3 @@
-import sqlglot
 
 from fork.db import Database
 from fork.models import Dependency, Reading, Rewrite
