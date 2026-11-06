@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .branch import BranchRunner, differs
+from .compare import results_equal
 from .db import Database
 from .discriminate import gather_evidence
 from .llm import LLM, NullLLM, default_llm
@@ -57,8 +58,6 @@ def check(
     if base.ok:
         try:
             cols, rows, _ = db.execute(sql, timeout=timeout)
-            from .compare import results_equal
-
             if not results_equal(rows, base.rows, ordered=pq.ordered):
                 notes.append("Re-rendered SQL differs from the original's result; branch comparisons use the re-rendered form.")
         except Exception as e:

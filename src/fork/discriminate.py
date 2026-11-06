@@ -8,6 +8,8 @@ null fork, how many rows the choice affects.
 
 from __future__ import annotations
 
+import re
+
 from sqlglot import exp
 
 from .db import Database, _qcol, _qtable
@@ -80,14 +82,7 @@ def _values_in_play(dep: Dependency) -> list:
             vals.append(rw.value)
         elif rw.type == "literal_set":
             vals.extend(rw.values or [])
-    # agent's own literal(s) from the detail string are not stored; profile top values fill in
-    if dep.profile:
-        for v in dep.profile.values():
-            if v in vals:
-                continue
-        # include agent literal: parse from detail "table.col = 'C'"
-    import re
-
+    # the agent's own literal(s) are quoted in the detail string: "table.col = 'C'"
     for m in re.finditer(r"'((?:[^']|'')*)'", dep.detail):
         vals.append(m.group(1).replace("''", "'"))
     seen, out = set(), []
