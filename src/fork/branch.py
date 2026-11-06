@@ -98,7 +98,7 @@ class BranchRunner:
             if sum(1 for r in combo if r.source != "agent") < 2:
                 continue  # already covered by the one-at-a-time pass
             choice = self.agent_choice()
-            for d, r in zip(forked, combo):
+            for d, r in zip(forked, combo, strict=False):
                 choice[d.id] = (d, r)
             res = self.run(choice)
             if res.ok and base.ok and not results_equal(base.rows, res.rows, ordered=self.pq.ordered):

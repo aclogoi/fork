@@ -126,7 +126,7 @@ class Fork:
 
     @property
     def answers(self) -> list[tuple[Reading, BranchResult]]:
-        return list(zip(self.dependency.readings, self.branches))
+        return list(zip(self.dependency.readings, self.branches, strict=False))
 
 
 @dataclass

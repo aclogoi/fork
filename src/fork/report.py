@@ -28,7 +28,7 @@ def to_dict(report: Report) -> dict:
     for key in ("base",):
         d[key]["answer"] = summarize(report.base.rows, report.base.columns)
     d["flipped"] = report.flipped
-    for f, fd in zip(report.forks, d["forks"]):
+    for f, fd in zip(report.forks, d["forks"], strict=False):
         fd["answers"] = [
             {"reading": r.id, "description": r.description, "prior": r.prior, "source": r.source,
              "answer": summarize(b.rows, b.columns), "error": b.error, "sql": b.sql}

@@ -158,7 +158,7 @@ class Database:
         for name in names:
             q = name.replace('"', '""')
             cols, pk = [], []
-            for cid, cname, ctype, notnull, dflt, ispk in conn.execute(f'PRAGMA table_info("{q}")'):
+            for _cid, cname, ctype, _notnull, _dflt, ispk in conn.execute(f'PRAGMA table_info("{q}")'):
                 cols.append((cname, ctype or ""))
                 if ispk:
                     pk.append(cname)

@@ -28,7 +28,7 @@ def main():
             by_db[q["db_id"]].append(q)
         rng = random.Random(args.seed)
         chosen = []
-        for db_id, items in sorted(by_db.items()):
+        for _db_id, items in sorted(by_db.items()):
             k = max(10, round(args.n * len(items) / len(qs)))
             rng.shuffle(items)
             chosen.extend(items[:k])

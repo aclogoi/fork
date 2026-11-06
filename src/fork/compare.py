@@ -49,7 +49,7 @@ def _close(a: Any, b: Any) -> bool:
 
 
 def _rows_close(a: tuple, b: tuple) -> bool:
-    return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b))
+    return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=False))
 
 
 def results_equal(a: list[tuple] | None, b: list[tuple] | None, ordered: bool = False) -> bool:
@@ -60,7 +60,7 @@ def results_equal(a: list[tuple] | None, b: list[tuple] | None, ordered: bool = 
     na = [_row(r) for r in a]
     nb = [_row(r) for r in b]
     if ordered:
-        return all(_rows_close(x, y) for x, y in zip(na, nb))
+        return all(_rows_close(x, y) for x, y in zip(na, nb, strict=False))
     if Counter(na) == Counter(nb):
         return True
     # tolerance-aware multiset match for float-bearing rows
