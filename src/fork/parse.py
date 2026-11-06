@@ -265,7 +265,7 @@ def null_sites(pq: ParsedQuery, db: Database) -> list[NullSite]:
 @dataclass
 class DupSite:
     node_id: int
-    shape: str              # "select_distinct", "select_plain", "count_distinct", "count_plain", "limit_one"
+    shape: str              # "select_plain", "count_distinct", "count_plain", "limit_one"
     table: str              # table of the first projected / counted column, or the first table
     column: str             # that column, or "" when none resolves
     detail: str
@@ -286,10 +286,9 @@ def duplicate_sites(pq: ParsedQuery, db: Database) -> list[DupSite]:
         resolved = [r for r in resolved if r]
         t, c = (resolved[0] if resolved else (first_table, ""))
         proj_text = ", ".join(_proj_text(e, db.dialect) for e in projections)[:80]
-        if root.args.get("distinct") is not None:
-            if not has_agg:
-                out.append(DupSite(0, "select_distinct", t, c, f"SELECT DISTINCT {proj_text}"))
-        elif not has_agg and not has_star and root.args.get("group") is None and projections:
+        # SELECT DISTINCT is left alone: dropping it only re-exposes join fan-out, which is
+        # never a reading of the question (BIRD run 3: 12 of 13 such forks judged implausible).
+        if root.args.get("distinct") is None and not has_agg and not has_star and root.args.get("group") is None and projections:
             if not (_projects_primary_key(resolved, db) and not joined):
                 out.append(DupSite(0, "select_plain", t, c, f"SELECT {proj_text} (no DISTINCT)"))
         limit = root.args.get("limit")

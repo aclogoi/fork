@@ -52,9 +52,13 @@ def _rows_close(a: tuple, b: tuple) -> bool:
     return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=False))
 
 
-def results_equal(a: list[tuple] | None, b: list[tuple] | None, ordered: bool = False) -> bool:
+def results_equal(a: list[tuple] | None, b: list[tuple] | None, ordered: bool = False, distinct: bool = False) -> bool:
+    """With distinct, repeated rows count once: a result that only repeats the same row is the same answer."""
     if a is None or b is None:
         return a is b
+    if distinct:
+        a, b = list(dict.fromkeys(_row(r) for r in a)), list(dict.fromkeys(_row(r) for r in b))
+        ordered = False
     if len(a) != len(b):
         return False
     na = [_row(r) for r in a]

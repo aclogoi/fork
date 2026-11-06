@@ -106,12 +106,15 @@ class BranchRunner:
         return extra
 
 
-def differs(base: BranchResult, other: BranchResult, ordered: bool) -> bool:
-    """A branch 'flips' if it returns a different answer, or errors where the base did not."""
+def differs(base: BranchResult, other: BranchResult, ordered: bool, distinct: bool = False) -> bool:
+    """A branch 'flips' if it returns a different answer, or errors where the base did not.
+
+    With distinct, a branch that only repeats the base's rows (ties that are the same
+    row again) is not a different answer."""
     if other.error and other.error.startswith("untested"):
         return False
     if not base.ok:
         return other.ok
     if not other.ok:
         return True
-    return not results_equal(base.rows, other.rows, ordered=ordered)
+    return not results_equal(base.rows, other.rows, ordered=ordered, distinct=distinct)

@@ -58,3 +58,16 @@ def test_llm_keeps_duplicates_alternative(loans_conn):
     r = fork.check("Which customers have loans?", "SELECT customer_id FROM loans", loans_conn, llm=FakeLLM([answer]))
     assert len(r.forks) == 1 and r.forks[0].dependency.kind == "duplicates"
     assert r.forks[0].dependency.readings[1].prior == 0.4
+
+
+def test_select_distinct_is_left_alone(loans_conn):
+    r = fork.check("Which regions have loans?", "SELECT DISTINCT region FROM loans", loans_conn, llm="none")
+    assert not any(d.kind == "duplicates" for d in r.dependencies)
+
+
+def test_ties_that_repeat_the_same_row_do_not_fork(loans_conn):
+    # every closed loan has current_balance 0, so the tie set is many rows, but all read 'C' or 'c'
+    r = fork.check("What is the status of the loan with the smallest current balance?",
+                   "SELECT status FROM loans WHERE status = 'C' ORDER BY current_balance LIMIT 1", loans_conn, llm="none")
+    ties = [d for d in r.dependencies if d.readings[1].rewrite.type == "include_ties"]
+    assert ties and ties[0] in r.collapsed

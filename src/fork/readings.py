@@ -175,8 +175,6 @@ def _contains_count(db: Database, table: str, column: str, value: str) -> int:
 
 def _dup_alternative(site: DupSite) -> tuple[Rewrite, str, str, float]:
     c = site.column or "value"
-    if site.shape == "select_distinct":
-        return Rewrite("drop_distinct"), "one row per distinct value (DISTINCT)", "one row per matching record, repeats kept", 0.3
     if site.shape == "select_plain":
         return Rewrite("add_distinct"), "one row per matching record, repeats kept", "one row per distinct value (DISTINCT)", 0.3
     if site.shape == "count_distinct":

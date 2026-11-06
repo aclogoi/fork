@@ -68,7 +68,9 @@ def check(
     collapsed = []
     for d in deps:
         results = per_dep[d.id]
-        if any(differs(base, b, pq.ordered) for b in results[1:]):
+        # every row tied for first is only a different answer if the tied rows differ
+        distinct = any(r.rewrite.type == "include_ties" for r in d.alternatives)
+        if any(differs(base, b, pq.ordered, distinct=distinct) for b in results[1:]):
             forks.append(Fork(dependency=d, branches=results))
         else:
             collapsed.append(d)
