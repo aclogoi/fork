@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+eval/bird/out/
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
+uv.lock
