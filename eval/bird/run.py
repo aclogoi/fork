@@ -24,6 +24,7 @@ from pathlib import Path
 from common import OUT, append_jsonl, db_path, load_env, read_jsonl
 
 import fork
+import fork.readings
 from fork.compare import results_equal, summarize
 from fork.db import Database
 from fork.llm import default_llm
@@ -108,7 +109,7 @@ def classify_mismatch(gold_rows, base_rows) -> str:
     return "values"
 
 
-def process(q: dict, b: dict, llm, judge, timeout: float) -> dict:
+def process(q: dict, b: dict, llm, judge, timeout: float, min_prior: float) -> dict:
     db = Database.connect(db_path(q["db_id"]))
     row = {"question_id": q["question_id"], "db_id": q["db_id"], "question": q["question"], "difficulty": q.get("difficulty"),
            "gold_sql": q["SQL"], "baseline_sql": b["sql"], "evidence": q.get("evidence")}
@@ -117,7 +118,7 @@ def process(q: dict, b: dict, llm, judge, timeout: float) -> dict:
     row["gold_answer"] = summarize(gold_rows, None) if gold_rows is not None else None
     t0 = time.time()
     try:
-        rep = fork.check(q["question"], b["sql"], db, llm=llm, timeout=timeout)
+        rep = fork.check(q["question"], b["sql"], db, llm=llm, timeout=timeout, min_prior=min_prior)
     except Exception as e:
         row.update({"check_error": f"{type(e).__name__}: {e}", "elapsed": round(time.time() - t0, 2)})
         return row
@@ -162,6 +163,7 @@ def main():
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--llm", default=None, help="anthropic | openai | none")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--min-prior", type=float, default=fork.readings.MIN_PRIOR, help="drop alternatives the proposer rates below this")
     args = ap.parse_args()
     qs = json.load(open(args.questions))
     if args.limit:
@@ -176,7 +178,7 @@ def main():
     llm = default_llm(args.llm)
     judge = None if (args.no_judge or llm.name == "none") else llm
     with cf.ThreadPoolExecutor(args.workers) as ex:
-        futs = [ex.submit(process, q, baseline[q["question_id"]], llm, judge, args.timeout) for q in todo]
+        futs = [ex.submit(process, q, baseline[q["question_id"]], llm, judge, args.timeout, args.min_prior) for q in todo]
         for i, fut in enumerate(cf.as_completed(futs), 1):
             append_jsonl(out, fut.result())
             if i % 10 == 0 or i == len(todo):

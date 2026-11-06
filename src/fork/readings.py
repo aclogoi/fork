@@ -374,7 +374,7 @@ def llm_prompt(question: str, sql: str, deps: list[Dependency], pq: ParsedQuery,
     return "\n".join(lines)
 
 
-MIN_PRIOR = 0.2
+MIN_PRIOR = 0.25  # BIRD run 4: 0.2 gives 24% flip at 46% judged noise, 0.25 gives 16% at 25%
 
 
 def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db: Database, min_prior: float = MIN_PRIOR) -> list[Dependency]:

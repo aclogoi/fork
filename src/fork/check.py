@@ -11,7 +11,14 @@ from .discriminate import gather_evidence
 from .llm import LLM, NullLLM, default_llm
 from .models import Fork, Report
 from .parse import parse
-from .readings import LLM_SCHEMA, LLM_SYSTEM, heuristic_dependencies, llm_prompt, merge_llm_readings
+from .readings import (
+    LLM_SCHEMA,
+    LLM_SYSTEM,
+    MIN_PRIOR,
+    heuristic_dependencies,
+    llm_prompt,
+    merge_llm_readings,
+)
 
 
 def check(
@@ -23,7 +30,7 @@ def check(
     evidence: bool = True,
     interactions: bool = True,
     timeout: float = 30.0,
-    min_prior: float = 0.2,
+    min_prior: float = MIN_PRIOR,
 ) -> Report:
     """Check an agent's SQL for readings its answer depends on.
 

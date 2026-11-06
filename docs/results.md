@@ -61,3 +61,53 @@ Of 79 wrong answers that differ from gold by value or row count, Fork caught 4. 
 - **Duplicate handling dominates.** `SELECT DISTINCT` vs not, `COUNT(x)` vs `COUNT(DISTINCT x)`, `LIKE '%Flying%'` vs `= 'Flying'` on comma-separated columns, and ties under `LIMIT 1` account for roughly a third of them (questions 210, 343, 354, 376, 406, 444, 448, 452, 483, 681, 802, 805 in the sample). This is the "duplicates and boundaries" reading kind deferred from v0; it is the largest single recall lever left.
 - **BIRD evidence thresholds.** "Positive comment refers to score > 60", "elder user refers to Age > 65", "teenage is 13 to 18". No reading of the schema recovers an arbitrary threshold; these are irreducible without the hint and should be excluded from the catch denominator in the write-up.
 - **Join path and aggregation shape.** Different join routes (postHistory vs posts), percentage formulas, LEFT vs INNER join. Out of scope for a reading checker.
+
+## Run 3, 6 Nov 2026 (duplicates reading kind added, prior floor 0.2)
+
+New dependency kind `duplicates`: `SELECT DISTINCT` toggled in both directions, `COUNT(col)` vs `COUNT(DISTINCT col)`, and `ORDER BY x LIMIT 1` expanded to every row tied for first. Value literals also gained `LIKE '%v%'` vs `= 'v'` in both directions, proposed only when the data shows the other form matters (other cells hold the value with more text, or the value also occurs on its own).
+
+| metric | value |
+|---|---|
+| flip rate | 30.8% (92/299) |
+| flip rate on wrong answers | 40.4% |
+| catch rate, strict | 13.2% (15/114) |
+| catch rate, loose | 24.6% |
+| noise rate, LLM judge | 57.1% (28/49) |
+| forks by kind | duplicates 57, value_literal 29, column_choice 21 |
+
+The duplicates kind is the recall lever the run-2 analysis predicted: strict catch went from 4 to 15, and 6 of the 12 duplicate-handling misses listed under run 2 are now caught (the other 6 need a different column or join). It also brought the noise: 18 of the 28 rejected forks were duplicates forks, and 12 of those 18 were one shape, *removing* the agent's `SELECT DISTINCT`. The repeats that exposes come from join fan-out (a molecule once per atom, a patient once per lab record), which is never a reading of the question. The judge was right on all 12.
+
+Changes for run 4: the DISTINCT-removal direction is no longer a dependency; a tie expansion counts as a flip only when the tied rows differ from the first row (a count repeated eight times is the same answer).
+
+## Run 4, 6 Nov 2026 (duplicates without DISTINCT removal, prior floor 0.2)
+
+| metric | value |
+|---|---|
+| flip rate | 24.4% (73/299) |
+| flip rate on wrong answers | 32.5% |
+| flip rate on right answers | 19.5% |
+| catch rate, strict | 9.6% (11/114) |
+| catch rate, strict, on value or row-count mismatches only | 13.9% |
+| catch rate, loose | 17.5% |
+| noise rate, LLM judge | 45.9% (17/37) |
+| forks by kind | value_literal 29, column_choice 24, duplicates 26 |
+| dependencies surviving the LLM gate, mean per question | 0.50 |
+
+Strict catches by reading: column substitution 3, `COUNT(DISTINCT)` to `COUNT` 3, added DISTINCT 1, `LIKE` to equals 1, the rest through interaction branches.
+
+Noise by reading on correct answers (implausible / judged): column substitution 5/10, added DISTINCT 2/8, `LIKE`-contains 3/6, tie expansion 2/3, dropped filter 2/3, literal replacement 2/2. Of the 17 rejected forks, 12 carry a prior of exactly 0.2, the floor: the proposer hugs the floor when it is unsure.
+
+### Prior floor sweep (run-4 data, no re-run)
+
+The catch column here compares summarised answers and understates the exact figure (9.6% at 0.2).
+
+| floor | flip rate | flip on wrong | noise (judge) | forks on right answers | catch (approx.) |
+|---|---|---|---|---|---|
+| 0.20 | 23.7% | 32.5% | 46% (17/37) | 37 | 7.0% |
+| 0.25 | 16.1% | 22.8% | 25% (6/24) | 24 | 4.4% |
+| 0.30 | 12.7% | 18.4% | 17% (3/18) | 18 | 4.4% |
+| 0.35 | 7.4% | 11.4% | 11% (1/9) | 9 | 3.5% |
+
+At a floor of 0.25 both gate bars clear on the judge's numbers: flip above 15%, noise under a third. That is now the default `min_prior`. Run 5 measures it directly rather than by post-filtering run 4.
+
+Rejected forks a reviewer might still want: 'Business' matching 'Business Administration' (prior 0.45), blue eyes including 'Yellow / Blue' (0.22). The human label sheet for run 4 is `eval/bird/out/run4_sample300_seed0.labels.csv`.
