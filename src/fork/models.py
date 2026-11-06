@@ -56,6 +56,7 @@ class Rewrite:
         "empty_as_null",        # IS NULL -> (IS NULL OR = '')
         "coalesce_zero",        # AVG(col) -> AVG(COALESCE(col, 0))
         "count_star",           # COUNT(col) -> COUNT(*)
+        "drop_predicate",       # the term does not restrict rows: predicate -> TRUE
         "identity",             # the agent's reading
     ]
     value: Any = None

@@ -38,7 +38,7 @@ def apply(pq: ParsedQuery, choice: dict[str, tuple[Dependency, Reading]], dialec
         for col in list(tree.find_all(exp.Column)):
             if (col.table or "").lower() == alias and col.name.lower() == name:
                 col.set("this", _ident(reading.rewrite.column))
-    return tree.sql(dialect=dialect)
+    return tree.sql(dialect=dialect, identify=True)
 
 
 def _lit(v) -> exp.Expression:
@@ -88,6 +88,10 @@ def _apply_node_rewrite(node: exp.Expression, rw) -> None:
     if t == "count_star":
         if isinstance(node, exp.Count):
             node.set("this", exp.Star())
+        return
+    if t == "drop_predicate":
+        target = node.parent if isinstance(node.parent, exp.Not) else node
+        target.replace(exp.true())
         return
     raise ValueError(f"unknown rewrite {t}")
 

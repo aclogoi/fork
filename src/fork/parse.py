@@ -25,10 +25,11 @@ class ParsedQuery:
     root: exp.Expression                # qualified tree
     nodes: list[exp.Expression]         # root.walk() order
     aliases: dict[str, str]             # alias (lowercase) -> real table name
+    derived: dict[str, exp.Select]      # subquery / CTE alias (lowercase) -> its SELECT
     ordered: bool                       # top-level ORDER BY present
 
     def sql(self, dialect: str) -> str:
-        return self.root.sql(dialect=dialect)
+        return self.root.sql(dialect=dialect, identify=True)
 
 
 def parse(sql: str, db: Database) -> ParsedQuery:
@@ -53,10 +54,17 @@ def parse(sql: str, db: Database) -> ParsedQuery:
         if real is None:
             continue
         aliases[(t.alias or t.name).lower()] = real.name
+    derived: dict[str, exp.Select] = {}
+    for sub in q.find_all(exp.Subquery):
+        if sub.alias and isinstance(sub.this, exp.Select):
+            derived[sub.alias.lower()] = sub.this
+    for cte in q.find_all(exp.CTE):
+        if cte.alias and isinstance(cte.this, exp.Select):
+            derived[cte.alias.lower()] = cte.this
     ordered = isinstance(q, exp.Select) and q.args.get("order") is not None
     if isinstance(q, (exp.Union, exp.Intersect, exp.Except)):
         ordered = q.args.get("order") is not None
-    return ParsedQuery(root=q, nodes=list(q.walk()), aliases=aliases, ordered=ordered)
+    return ParsedQuery(root=q, nodes=list(q.walk()), aliases=aliases, derived=derived, ordered=ordered)
 
 
 def _best_effort_qualify(tree: exp.Expression, db: Database) -> None:
@@ -74,10 +82,26 @@ def _best_effort_qualify(tree: exp.Expression, db: Database) -> None:
 # ---- column resolution --------------------------------------------------
 
 
-def resolve(col: exp.Column, pq: ParsedQuery, db: Database) -> tuple[str, str] | None:
-    """Map a Column node to (real table name, real column name)."""
+def resolve(col: exp.Column, pq: ParsedQuery, db: Database, through_derived: bool = True, _depth: int = 0) -> tuple[str, str] | None:
+    """Map a Column node to (real table name, real column name).
+
+    With through_derived, a column of a subquery or CTE is followed to the
+    projection it comes from, when that projection is a plain column.
+    """
     if col.table:
-        table = pq.aliases.get(col.table.lower())
+        tl = col.table.lower()
+        table = pq.aliases.get(tl)
+        if not table and tl in pq.derived:
+            if not through_derived or _depth > 5:
+                return None
+            sel = pq.derived[tl]
+            for proj in sel.expressions:
+                if proj.alias_or_name.lower() == col.name.lower():
+                    inner = proj.this if isinstance(proj, exp.Alias) else proj
+                    if isinstance(inner, exp.Column):
+                        return resolve(inner, pq, db, True, _depth + 1)
+                    return None
+            return None
         if not table:
             real = db.find_table(col.table)
             table = real.name if real else None
@@ -163,10 +187,10 @@ def column_sites(pq: ParsedQuery, db: Database) -> list[ColumnSite]:
     for i, node in enumerate(pq.nodes):
         if not isinstance(node, exp.Column):
             continue
-        r = resolve(node, pq, db)
+        r = resolve(node, pq, db, through_derived=False)
         if not r:
             continue
-        in_join = any(isinstance(p, exp.Join) for p in node.walk(bfs=False) if False) or _inside_join_on(node)
+        in_join = _inside_join_on(node)
         site = seen.get(r)
         if site is None:
             seen[r] = ColumnSite(r[0], r[1], [i], in_join)

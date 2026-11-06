@@ -29,7 +29,7 @@ from fork.db import Database
 from fork.llm import default_llm
 from fork.report import to_dict
 
-JUDGE_SYSTEM = """You judge whether an alternative reading of a question is plausible. You see a natural-language question, the SQL an agent wrote, and a fork: a column or value whose reading changes the answer, with the agent's reading and an alternative. Decide whether a careful analyst, reading the question and looking at the data, could reasonably have taken the question to mean the alternative. Answer plausible=true only if the alternative is a defensible interpretation of the question's wording, not merely a different query."""
+JUDGE_SYSTEM = """You judge whether an alternative reading of a question is plausible. You see a natural-language question, the SQL an agent wrote, and a fork: a column or value whose reading changes the answer, with the agent's reading and an alternative. Decide whether a careful analyst, reading the question and looking at the data, could reasonably have taken the question to mean the alternative. Answer plausible=true only if the alternative is a defensible interpretation of the question's wording, not merely a different query. Treat the columns and codes as undocumented: judge from the question, the SQL and the evidence rows shown, not from outside knowledge of what this dataset's codes mean."""
 
 JUDGE_SCHEMA = {
     "type": "object",

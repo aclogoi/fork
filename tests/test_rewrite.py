@@ -55,3 +55,14 @@ def test_empty_as_null_and_count_star(loans_conn):
     sql = apply(pq, {"d1": (d1, d1.readings[1]), "d2": (d2, d2.readings[1])}, "sqlite")
     assert "COUNT(*)" in sql and "<> ''" in sql
     assert db.execute(sql)[1] == [(91,)]
+
+
+def test_resolve_through_subquery_and_drop_predicate(loans_conn):
+    db = Database.connect(loans_conn)
+    sql = "SELECT COUNT(*) FROM (SELECT l.status AS st, l.balance FROM loans l WHERE l.balance > 0) WHERE st = 'C'"
+    pq = parse(sql, db)
+    sites = literal_sites(pq, db)
+    assert [(s.table, s.column, s.values) for s in sites] == [("loans", "status", ["C"])]
+    d = _dep(pq, sites[0].node_id, "value_literal", "loans", "status", Rewrite("drop_predicate"))
+    out = apply(pq, {"d1": (d, d.readings[1])}, "sqlite")
+    assert "TRUE" in out and db.execute(out)[1][0][0] > db.execute(pq.sql("sqlite"))[1][0][0]

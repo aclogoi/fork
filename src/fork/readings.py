@@ -214,15 +214,16 @@ def _null_alternative(shape: str, prof: ColumnProfile, column: str):
 
 LLM_SYSTEM = """You review a SQL query that an agent wrote to answer a natural-language question against a database with undocumented columns. Your job is to find the places where the agent silently chose one reading of a column or value when another reading is also a plausible interpretation of the question.
 
-You are given candidate dependencies found by heuristics, each with a column profile (sample values, null rate) and candidate alternative readings. For each dependency decide which alternatives a careful analyst could plausibly take the question to mean. Be strict: an alternative is plausible only if, reading the question and looking at the data, a reasonable person might resolve the term that way. Do not propose alternatives that merely change the query; propose readings of the question.
+You are given candidate dependencies found by heuristics, each with a column profile (sample values, null rate) and candidate alternative readings. For each dependency decide which alternatives a careful analyst could plausibly take the question to mean. Be strict: an alternative is plausible only if it is a defensible interpretation of the question's wording, given the data. When the question's wording names the agent's column or value directly (it says 'K-12' and the agent used the K-12 column; it says 'free' and the agent used the free-only column), the look-alike column is not a reading, it is a different question: do not list it. Do not propose alternatives that merely change the query; propose readings of the question.
 
 You may also add alternatives the heuristics missed, restricted to these rewrite types:
 - replace_literal: the literal should be a different value from the column (value must appear in the profile)
 - literal_set: the question's term covers several values from the column (all must appear in the profile)
 - replace_column: the question's term refers to a different column of the same table (name it exactly as in the schema)
+- drop_predicate: the question's term does not restrict rows at all; the agent turned a descriptive phrase into a filter the question did not ask for, or filtered on a code when the question meant every row
 And you may add new column_choice dependencies for columns the query uses when a sibling column in the same table is a plausible referent of the question's wording.
 
-Priors are rough probabilities that the question meant that reading; they need not sum to one. Keep at most 2 alternatives per dependency. Drop every dependency whose agent reading is clearly the only plausible one by returning it with an empty alternatives list."""
+Priors are rough probabilities that the question meant that reading; they need not sum to one. Keep at most 2 alternatives per dependency. Omit any alternative you would give a prior below 0.15: listing it is the same as calling it implausible, and a hedged alternative ('the question says X, but...') is not an alternative. Drop every dependency whose agent reading is clearly the only plausible one by returning it with an empty alternatives list. Look hardest at undocumented codes (single letters, abbreviations, flags) whose meaning the question's wording does not pin down, and at qualifiers in the question that the agent may have mapped to the wrong code or column."""
 
 LLM_SCHEMA = {
     "type": "object",
@@ -241,7 +242,7 @@ LLM_SCHEMA = {
                             "properties": {
                                 "description": {"type": "string"},
                                 "prior": {"type": "number"},
-                                "rewrite_type": {"type": "string", "enum": ["replace_literal", "literal_set", "replace_column", "include_nulls", "empty_as_null", "coalesce_zero", "count_star"]},
+                                "rewrite_type": {"type": "string", "enum": ["replace_literal", "literal_set", "replace_column", "include_nulls", "empty_as_null", "coalesce_zero", "count_star", "drop_predicate"]},
                                 "value": {"type": ["string", "number", "null"]},
                                 "values": {"type": ["array", "null"], "items": {"type": ["string", "number"]}},
                                 "column": {"type": ["string", "null"]},
@@ -301,8 +302,13 @@ def llm_prompt(question: str, sql: str, deps: list[Dependency], pq: ParsedQuery,
     return "\n".join(lines)
 
 
-def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db: Database) -> list[Dependency]:
-    """Apply the LLM's verdicts: keep the dependencies it kept, adopt its alternatives and priors."""
+MIN_PRIOR = 0.15
+
+
+def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db: Database, min_prior: float = MIN_PRIOR) -> list[Dependency]:
+    """Apply the LLM's verdicts: keep the dependencies it kept, adopt its alternatives and priors.
+
+    Alternatives below min_prior are dropped: the model listed them but does not believe them."""
     by_id = {d.id: d for d in deps}
     out: list[Dependency] = []
     for item in answer.get("dependencies", []):
@@ -311,10 +317,13 @@ def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db
             continue
         alts = []
         for a in item.get("alternatives", [])[:MAX_ALTERNATIVES_PER_DEP]:
+            prior = float(a.get("prior", 0.3))
+            if prior < min_prior:
+                continue
             rw = _rewrite_from_llm(a, d, db)
             if rw is None:
                 continue
-            alts.append(Reading("", a.get("description", ""), rw, float(a.get("prior", 0.3)), "llm"))
+            alts.append(Reading("", a.get("description", ""), rw, prior, "llm"))
         if not alts:
             continue
         agent = d.readings[0]
@@ -332,6 +341,8 @@ def merge_llm_readings(deps: list[Dependency], answer: dict, pq: ParsedQuery, db
         table = db.find_table(site[0])
         alt = db.find_column(site[0], item.get("alternative_column", ""))
         if table is None or alt is None or alt.lower() == site[1].lower():
+            continue
+        if float(item.get("prior", 0.3)) < min_prior:
             continue
         if any(o.kind == "column_choice" and o.table == site[0] and o.column == site[1] for o in out):
             continue
@@ -381,6 +392,10 @@ def _rewrite_from_llm(a: dict, d: Dependency, db: Database) -> Rewrite | None:
         if d.kind != "null_handling":
             return None
         return Rewrite(t)
+    if t == "drop_predicate":
+        if d.kind != "value_literal":
+            return None
+        return Rewrite("drop_predicate")
     return None
 
 

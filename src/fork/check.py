@@ -22,6 +22,7 @@ def check(
     evidence: bool = True,
     interactions: bool = True,
     timeout: float = 30.0,
+    min_prior: float = 0.15,
 ) -> Report:
     """Check an agent's SQL for readings its answer depends on.
 
@@ -30,6 +31,7 @@ def check(
     conn: a sqlite3 or psycopg connection, a path to a SQLite file, or a URL.
     llm: an LLM instance, a provider name ("anthropic", "openai", "none"), or
          None to pick from the environment. With "none" only heuristics run.
+    min_prior: alternatives the model rates below this are dropped.
     """
     db = Database.connect(conn)
     model: LLM = default_llm(llm) if (llm is None or isinstance(llm, str)) else llm
@@ -43,7 +45,7 @@ def check(
         try:
             answer = model.json(LLM_SYSTEM, llm_prompt(question, sql, deps, pq, db), LLM_SCHEMA)
             llm_calls += 1
-            deps = merge_llm_readings(deps, answer, pq, db)
+            deps = merge_llm_readings(deps, answer, pq, db, min_prior=min_prior)
         except Exception as e:
             notes.append(f"LLM reading pass failed, using heuristics only: {type(e).__name__}: {e}")
     elif deps:
