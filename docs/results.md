@@ -25,6 +25,31 @@ Recall misses seen on wrong answers: two date columns with dissimilar names (`Fi
 
 Changes for run 2: prior floor 0.2; proposer told not to reverse codes without evidence and not to hedge; any two date columns in a table are column-choice candidates; plural stemming in name similarity; loose catch metric added (a fork names a column or literal the gold SQL uses and the baseline does not).
 
-## Run 2
+## Run 2, 6 Nov 2026 (prior floor 0.2, tuned proposer)
 
-Pending.
+| metric | value |
+|---|---|
+| flip rate | 13.0% (39/299) |
+| flip rate on wrong answers | 15.8% |
+| flip rate on right answers | 11.4% |
+| catch rate, strict | 3.5% (4/114) |
+| catch rate, strict, on value or row-count mismatches only | 5.1% (4/79) |
+| noise rate, LLM judge | 41.7% (10/24) |
+| forks by kind | column_choice 25, value_literal 23 |
+
+Two of the four strict catches came from the run-2 additions: the dropped-filter reading (question 29, the agent's invented grade filter) and the date-column choice (question 1162, `First Date` vs `Description`).
+
+### Prior floor sweep (run-2 data, no re-run)
+
+A fork survives the floor if any alternative reading has at least that prior.
+
+| floor | flip rate | flip on wrong | noise (judge) | forks on right answers | strict catch |
+|---|---|---|---|---|---|
+| 0.20 | 13.0% | 15.8% | 42% (10/24) | 24 | 3.5% |
+| 0.25 | 8.0% | 10.5% | 27% (4/15) | 15 | 2.6% |
+| 0.30 | 7.4% | 9.6% | 21% (3/14) | 14 | 2.6% |
+| 0.35 | 4.3% | 4.4% | 10% (1/10) | 10 | 0.9% |
+
+The proposer's prior is a strictness dial. No setting clears both bars at once: the permissive end gives 13% flip at 42% noise, the strict end gives 8% flip at 27% noise. The honest launch framing is a pair of numbers at two strictness levels, with the human-labelled noise rate next to each.
+
+The judge is also the weak instrument here. Several forks it rejected are the kind a reviewer would want surfaced (blue eyes including 'Yellow/Blue'; 'names' as superhero name vs real name; 'September Meeting' vs all September events). The 50-fork human label sheet from run 2 settles whether the judge is too strict: `eval/bird/out/run2_sample300_seed0.labels.csv`.
