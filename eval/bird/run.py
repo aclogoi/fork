@@ -79,6 +79,14 @@ def loose_catch(rep, gold_sql: str, baseline_sql: str) -> bool:
                 col = f.dependency.column.lower()
                 if col in bl and col not in g:
                     return True
+            if rw.type in ("add_distinct", "count_distinct") and "distinct" in g and "distinct" not in bl:
+                return True
+            if rw.type in ("drop_distinct", "count_all") and "distinct" in bl and "distinct" not in g:
+                return True
+            if rw.type == "like_contains" and " like " in g and " like " not in bl:
+                return True
+            if rw.type == "exact_match" and " like " in bl and " like " not in g:
+                return True
             for t in tokens:
                 if t in g and t not in bl:
                     return True

@@ -125,8 +125,8 @@ class LiteralSite:
     table: str
     column: str
     column_node: exp.Column
-    op: str                 # "=", "!=", "in", "not in"
-    values: list[str]       # string literal(s)
+    op: str                 # "=", "!=", "in", "not in", "like"
+    values: list[str]       # string literal(s); for "like", the pattern with the %s stripped
     negated: bool
 
 
@@ -170,7 +170,28 @@ def literal_sites(pq: ParsedQuery, db: Database) -> list[LiteralSite]:
             if not r:
                 continue
             out.append(LiteralSite(i, r[0], r[1], col, "not in" if negated else "in", [x.this for x in lits], negated))
+        elif isinstance(node, (exp.Like, exp.ILike)):
+            col, pat = node.this, node.expression
+            if not isinstance(col, exp.Column) or not isinstance(pat, exp.Literal) or not pat.is_string:
+                continue
+            core = _like_core(pat.this)
+            if core is None:
+                continue
+            r = resolve(col, pq, db)
+            if not r:
+                continue
+            out.append(LiteralSite(i, r[0], r[1], col, "like", [core], negated))
     return out
+
+
+def _like_core(pattern: str) -> str | None:
+    """'%Flying%' -> 'Flying'. Only the contains form, with no further wildcards."""
+    if len(pattern) < 3 or not (pattern.startswith("%") and pattern.endswith("%")):
+        return None
+    core = pattern[1:-1]
+    if not core or "%" in core or "_" in core:
+        return None
+    return core
 
 
 def _column_and_literal(node: exp.Binary) -> tuple[exp.Column | None, exp.Literal | None]:
@@ -239,6 +260,79 @@ def null_sites(pq: ParsedQuery, db: Database) -> list[NullSite]:
             if r:
                 out.append(NullSite(i, r[0], r[1], "count"))
     return out
+
+
+@dataclass
+class DupSite:
+    node_id: int
+    shape: str              # "select_distinct", "select_plain", "count_distinct", "count_plain", "limit_one"
+    table: str              # table of the first projected / counted column, or the first table
+    column: str             # that column, or "" when none resolves
+    detail: str
+
+
+def duplicate_sites(pq: ParsedQuery, db: Database) -> list[DupSite]:
+    """Places where the query decided how to treat duplicate rows or values."""
+    out: list[DupSite] = []
+    root = pq.root
+    first_table = next(iter(sorted(set(pq.aliases.values()))), "")
+    if isinstance(root, exp.Select):
+        projections = root.expressions
+        has_agg = any(e.find(exp.AggFunc) is not None for e in projections)
+        has_star = any(isinstance(e, exp.Star) or (isinstance(e, exp.Column) and isinstance(e.this, exp.Star)) for e in projections)
+        joined = bool(root.args.get("joins"))
+        cols = [_projection_column(e) for e in projections]
+        resolved = [resolve(c, pq, db) for c in cols if c is not None]
+        resolved = [r for r in resolved if r]
+        t, c = (resolved[0] if resolved else (first_table, ""))
+        proj_text = ", ".join(_proj_text(e, db.dialect) for e in projections)[:80]
+        if root.args.get("distinct") is not None:
+            if not has_agg:
+                out.append(DupSite(0, "select_distinct", t, c, f"SELECT DISTINCT {proj_text}"))
+        elif not has_agg and not has_star and root.args.get("group") is None and projections:
+            if not (_projects_primary_key(resolved, db) and not joined):
+                out.append(DupSite(0, "select_plain", t, c, f"SELECT {proj_text} (no DISTINCT)"))
+        limit = root.args.get("limit")
+        if root.args.get("order") is not None and isinstance(limit, exp.Limit) and limit.expression.sql() == "1":
+            order_text = ", ".join(o.sql(dialect=db.dialect) for o in root.args["order"].expressions)[:80]
+            out.append(DupSite(0, "limit_one", t, c, f"ORDER BY {order_text} LIMIT 1"))
+    for i, node in enumerate(pq.nodes):
+        if not isinstance(node, exp.Count):
+            continue
+        inner = node.this
+        if isinstance(inner, exp.Distinct) and len(inner.expressions) == 1 and isinstance(inner.expressions[0], exp.Column):
+            r = resolve(inner.expressions[0], pq, db)
+            if r:
+                out.append(DupSite(i, "count_distinct", r[0], r[1], f"COUNT(DISTINCT {r[1]})"))
+        elif isinstance(inner, exp.Column) and not isinstance(inner.this, exp.Star):
+            r = resolve(inner, pq, db)
+            if not r:
+                continue
+            sel = node.find_ancestor(exp.Select)
+            joined = bool(sel.args.get("joins")) if sel is not None else False
+            if _projects_primary_key([r], db) and not joined:
+                continue
+            out.append(DupSite(i, "count_plain", r[0], r[1], f"COUNT({r[1]}) (not DISTINCT)"))
+    return out
+
+
+def _proj_text(e: exp.Expression, dialect: str) -> str:
+    if isinstance(e, exp.Alias) and isinstance(e.this, exp.Column) and e.alias.lower() == e.this.name.lower():
+        return e.this.sql(dialect=dialect)
+    return e.sql(dialect=dialect)
+
+
+def _projection_column(e: exp.Expression) -> exp.Column | None:
+    inner = e.this if isinstance(e, exp.Alias) else e
+    return inner if isinstance(inner, exp.Column) else None
+
+
+def _projects_primary_key(resolved: list[tuple[str, str]], db: Database) -> bool:
+    for t, c in resolved:
+        tab = db.find_table(t)
+        if tab is not None and c in tab.primary_key:
+            return True
+    return False
 
 
 # ---- helpers used by readings -------------------------------------------

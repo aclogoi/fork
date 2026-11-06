@@ -70,10 +70,11 @@ exposes one tool, `check_sql(question, sql)`, that returns the report as markdow
 ## How it works
 
 1. **Parse.** The agent's SQL is parsed with sqlglot and every column reference is resolved to a real table so it can be profiled.
-2. **Readings.** Three kinds of dependency are found by heuristics, each with the agent's reading and up to two alternatives:
-   - *value literal*: `status = 'C'` where the codes are undocumented, or where the literal matches nothing in the column;
+2. **Readings.** Four kinds of dependency are found by heuristics, each with the agent's reading and up to two alternatives:
+   - *value literal*: `status = 'C'` where the codes are undocumented, where the literal matches nothing in the column, or where cells hold several values (`keywords = 'Flying'` versus `LIKE '%Flying%'`);
    - *column choice*: the agent picked `balance` where the table also has `current_balance`;
-   - *null handling*: `status != 'D'` silently drops NULL rows, `AVG(x)` ignores NULLs, `COUNT(col)` versus `COUNT(*)`.
+   - *null handling*: `status != 'D'` silently drops NULL rows, `AVG(x)` ignores NULLs, `COUNT(col)` versus `COUNT(*)`;
+   - *duplicates*: `SELECT DISTINCT` or not, `COUNT(col)` versus `COUNT(DISTINCT col)`, and `ORDER BY x LIMIT 1` versus every row tied for first.
    One LLM call then decides which alternatives are plausible readings of the *question*, adjusts priors, and adds readings the heuristics cannot see (a code set that means "nonperforming").
 3. **Branch.** The query is rewritten once per alternative reading and run. Pass one switches one reading at a time; pass two runs every combination of the forked readings when there are at most 16.
 4. **Compare.** Final answers are compared as row multisets with numeric tolerance. A reading that changes the answer is a fork; the rest collapse.
@@ -85,7 +86,7 @@ BIRD ships an "evidence" hint per question precisely because its columns are amb
 
 ## Scope of v0
 
-In: Postgres and SQLite, Python library, MCP server, CLI, three dependency kinds, one LLM call, dumb discriminating queries, reproducible BIRD evaluation.
+In: Postgres and SQLite, Python library, MCP server, CLI, four dependency kinds, one LLM call, dumb discriminating queries, reproducible BIRD evaluation.
 
 Out, deliberately: free-text sources, persisted or versioned readings, dependency tagging of downstream conclusions, research-grade discriminating-query synthesis.
 

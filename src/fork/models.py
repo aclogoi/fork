@@ -2,7 +2,9 @@
 
 A *dependency* is a place in the agent's SQL whose meaning is not fixed by the
 schema: a literal compared against a column, a column chosen among look-alikes,
-or a predicate/aggregate whose treatment of NULLs is a choice.
+a predicate/aggregate whose treatment of NULLs is a choice, or a duplicate
+decision (DISTINCT or not, count rows or distinct values, one top row or every
+row tied for first).
 
 A *reading* is one way of resolving a dependency. Reading 0 of every dependency
 is the agent's own reading (the SQL as written). Alternatives carry a rewrite
@@ -17,7 +19,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-DependencyKind = Literal["value_literal", "column_choice", "null_handling"]
+DependencyKind = Literal["value_literal", "column_choice", "null_handling", "duplicates"]
 
 
 @dataclass
@@ -57,6 +59,13 @@ class Rewrite:
         "coalesce_zero",        # AVG(col) -> AVG(COALESCE(col, 0))
         "count_star",           # COUNT(col) -> COUNT(*)
         "drop_predicate",       # the term does not restrict rows: predicate -> TRUE
+        "like_contains",        # col = 'v' -> col LIKE '%v%' (multi-valued cell)
+        "exact_match",          # col LIKE '%v%' -> col = 'v'
+        "add_distinct",         # SELECT ... -> SELECT DISTINCT ...
+        "drop_distinct",        # SELECT DISTINCT ... -> SELECT ...
+        "count_distinct",       # COUNT(col) -> COUNT(DISTINCT col)
+        "count_all",            # COUNT(DISTINCT col) -> COUNT(col)
+        "include_ties",         # ORDER BY x LIMIT 1 -> every row tied for first
         "identity",             # the agent's reading
     ]
     value: Any = None

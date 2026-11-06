@@ -61,6 +61,9 @@ def discriminating_query(dep: Dependency, db: Database) -> tuple[str, str]:
 
 
 def gather_evidence(fork: Fork, db: Database, timeout: float = 30.0) -> None:
+    if fork.dependency.kind == "duplicates":
+        fork.open_question = _duplicates_question(fork)
+        return
     try:
         sql, question = discriminating_query(fork.dependency, db)
     except Exception as e:
@@ -72,6 +75,27 @@ def gather_evidence(fork: Fork, db: Database, timeout: float = 30.0) -> None:
         fork.evidence = Evidence(sql, cols, rows)
     except Exception as e:
         fork.evidence = Evidence(sql, None, None, error=str(e))
+
+
+def _duplicates_question(fork: Fork) -> str:
+    """The branches already hold the evidence: how many rows each reading returns."""
+    dep = fork.dependency
+    counts = []
+    for r, b in fork.answers:
+        if not b.ok or b.rows is None:
+            counts.append(f"{r.description}: error")
+        elif dep.detail.startswith("COUNT("):
+            counts.append(f"{r.description}: {b.rows[0][0] if b.rows and b.rows[0] else '?'}")
+        else:
+            counts.append(f"{r.description}: {len(b.rows)}{'+' if b.truncated else ''} rows")
+    shape = dep.readings[1].rewrite.type if len(dep.readings) > 1 else ""
+    if shape == "include_ties":
+        lead = "Does the question want one row or every row tied for first?"
+    elif shape in ("count_distinct", "count_all"):
+        lead = f"Does the question count records or distinct {dep.column} values?"
+    else:
+        lead = "Does the question want one row per matching record or one per distinct value?"
+    return lead + " " + "; ".join(counts) + "."
 
 
 def _values_in_play(dep: Dependency) -> list:

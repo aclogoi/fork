@@ -13,11 +13,15 @@ from __future__ import annotations
 import difflib
 from typing import Any
 
-from .db import Database
+from sqlglot import exp
+
+from .db import Database, _qcol, _qtable
 from .models import ColumnProfile, Dependency, Reading, Rewrite
 from .parse import (
+    DupSite,
     ParsedQuery,
     column_sites,
+    duplicate_sites,
     literal_sites,
     name_tokens,
     null_sites,
@@ -51,7 +55,23 @@ def heuristic_dependencies(pq: ParsedQuery, db: Database) -> list[Dependency]:
     # -- value literals
     for site in literal_sites(pq, db):
         prof = db.profile(site.table, site.column)
-        if prof is None or not prof.categorical:
+        if prof is None:
+            continue
+        if site.op == "like":
+            # LIKE '%v%': the agent matched any cell containing v. Is v also a whole value?
+            v = site.values[0]
+            if not _count_where(db, site.table, site.column, exp.EQ(this=_qcol(site.column), expression=exp.Literal.string(v))):
+                continue
+            dep = Dependency(new_id(), "value_literal", site.table, site.column, site.node_id,
+                             f"{site.table}.{site.column} LIKE '%{v}%'", profile=prof)
+            dep.readings.append(Reading(f"{dep.id}.0", f"{site.column} contains {v!r} anywhere in the cell (LIKE)", Rewrite("identity"), 0.6, "agent"))
+            dep.readings.append(Reading(f"{dep.id}.1", f"{site.column} is exactly {v!r}", Rewrite("exact_match"), 0.3, "heuristic"))
+            deps.append(dep)
+            continue
+        contains = 0
+        if site.op == "=" and not site.negated and len(site.values) == 1:
+            contains = _contains_count(db, site.table, site.column, site.values[0])
+        if not prof.categorical and not contains:
             continue
         lits = ", ".join(repr(v) for v in site.values)
         detail = f"{site.table}.{site.column} {site.op} {lits}"
@@ -61,6 +81,10 @@ def heuristic_dependencies(pq: ParsedQuery, db: Database) -> list[Dependency]:
         for alt in _literal_alternatives(site.values, site.op, prof):
             alt.id = f"{dep.id}.{len(dep.readings)}"
             dep.readings.append(alt)
+        if contains:
+            dep.readings.append(Reading(f"{dep.id}.{len(dep.readings)}",
+                                        f"{site.values[0]!r} means any {site.column} that includes {site.values[0]!r} ({contains} more rows hold it with other values)",
+                                        Rewrite("like_contains"), 0.3, "heuristic"))
         deps.append(dep)
 
     # -- column choice
@@ -116,7 +140,50 @@ def heuristic_dependencies(pq: ParsedQuery, db: Database) -> list[Dependency]:
         dep.readings.append(Reading(f"{dep.id}.1", desc_alt, rw, prior, "heuristic"))
         deps.append(dep)
 
+    # -- duplicates
+    for site in duplicate_sites(pq, db):
+        prof = db.profile(site.table, site.column) if site.column else None
+        rw, desc_agent, desc_alt, prior = _dup_alternative(site)
+        dep = Dependency(new_id(), "duplicates", site.table, site.column, site.node_id, site.detail, profile=prof)
+        dep.readings.append(Reading(f"{dep.id}.0", desc_agent, Rewrite("identity"), 1 - prior, "agent"))
+        dep.readings.append(Reading(f"{dep.id}.1", desc_alt, rw, prior, "heuristic"))
+        deps.append(dep)
+
     return deps
+
+
+def _count_where(db: Database, table: str, column: str, cond: exp.Expression, timeout: float = 5.0) -> int:
+    q = exp.select(exp.Count(this=exp.Star())).from_(_qtable(table)).where(cond)
+    try:
+        _, rows, _ = db.execute(q.sql(dialect=db.dialect), timeout=timeout, max_rows=1)
+        return int(rows[0][0]) if rows else 0
+    except Exception:
+        return 0
+
+
+def _contains_count(db: Database, table: str, column: str, value: str) -> int:
+    """Rows whose cell holds `value` alongside other content ('Flying, Trample' for 'Flying')."""
+    if not value or "%" in value or "_" in value or len(value) < 2:
+        return 0
+    col = _qcol(column)
+    cond = exp.and_(
+        exp.Like(this=col, expression=exp.Literal.string(f"%{value}%")),
+        exp.NEQ(this=col.copy(), expression=exp.Literal.string(value)),
+    )
+    return _count_where(db, table, column, cond)
+
+
+def _dup_alternative(site: DupSite) -> tuple[Rewrite, str, str, float]:
+    c = site.column or "value"
+    if site.shape == "select_distinct":
+        return Rewrite("drop_distinct"), "one row per distinct value (DISTINCT)", "one row per matching record, repeats kept", 0.3
+    if site.shape == "select_plain":
+        return Rewrite("add_distinct"), "one row per matching record, repeats kept", "one row per distinct value (DISTINCT)", 0.3
+    if site.shape == "count_distinct":
+        return Rewrite("count_all"), f"the number of distinct {c} values", f"the number of records with a {c}", 0.25
+    if site.shape == "count_plain":
+        return Rewrite("count_distinct"), f"the number of records with a {c} (repeats counted)", f"the number of distinct {c} values", 0.3
+    return Rewrite("include_ties"), "the single first row in order (ties broken arbitrarily)", "every row tied for first", 0.3
 
 
 # ---- literal alternatives -------------------------------------------------
@@ -224,7 +291,11 @@ You may also add alternatives the heuristics missed, restricted to these rewrite
 - literal_set: the question's term covers several values from the column (all must appear in the profile)
 - replace_column: the question's term refers to a different column of the same table (name it exactly as in the schema)
 - drop_predicate: the question's term does not restrict rows at all; the agent turned a descriptive phrase into a filter the question did not ask for, or filtered on a code when the question meant every row
+- like_contains: the cell holds several values ('Flying, Trample'); the question's term matches any cell that includes it, not only cells equal to it
+- exact_match: the reverse: the agent used LIKE '%term%' but the question means cells equal to the term
 And you may add new column_choice dependencies for columns the query uses when a sibling column in the same table is a plausible referent of the question's wording.
+
+Dependencies of kind "duplicates" are about repeats, not columns: whether the question wants one row per distinct value or one per matching record (DISTINCT or not), whether "how many X" counts records or distinct values, and whether a superlative ("the tallest", "the most") wants one row or every row tied for first. Keep the alternative when the wording leaves it open ("list the names of cards with ..." can mean distinct names or one per card; "how many types" can count distinct types or records) and drop it when the wording fixes it ("how many cards" counts records; "list the different ..." is distinct; "the one with the highest" wants one row). For these, the only allowed rewrite_type is the one the heuristic alternative names.
 
 Priors are rough probabilities that the question meant that reading; they need not sum to one. Keep at most 2 alternatives per dependency. Omit any alternative you would give a prior below 0.2: listing it is the same as calling it implausible, and a hedged alternative ('the question says X, but...') is not an alternative. Never propose that a code means the opposite of its conventional reading ('+' meaning negative, 'F' meaning not-full) unless the evidence rows support it. Do propose: a code set when a question's term plausibly spans several codes; a sibling column when the question's wording fits it as well as the agent's; a dropped filter when the agent turned a descriptive phrase into a predicate. Drop every dependency whose agent reading is clearly the only plausible one by returning it with an empty alternatives list. Look hardest at undocumented codes (single letters, abbreviations, flags) whose meaning the question's wording does not pin down, and at qualifiers in the question that the agent may have mapped to the wrong code or column."""
 
@@ -245,7 +316,7 @@ LLM_SCHEMA = {
                             "properties": {
                                 "description": {"type": "string"},
                                 "prior": {"type": "number"},
-                                "rewrite_type": {"type": "string", "enum": ["replace_literal", "literal_set", "replace_column", "include_nulls", "empty_as_null", "coalesce_zero", "count_star", "drop_predicate"]},
+                                "rewrite_type": {"type": "string", "enum": ["replace_literal", "literal_set", "replace_column", "include_nulls", "empty_as_null", "coalesce_zero", "count_star", "drop_predicate", "like_contains", "exact_match", "add_distinct", "drop_distinct", "count_distinct", "count_all", "include_ties"]},
                                 "value": {"type": ["string", "number", "null"]},
                                 "values": {"type": ["array", "null"], "items": {"type": ["string", "number"]}},
                                 "column": {"type": ["string", "null"]},
@@ -395,11 +466,18 @@ def _rewrite_from_llm(a: dict, d: Dependency, db: Database) -> Rewrite | None:
         if d.kind != "null_handling":
             return None
         return Rewrite(t)
-    if t == "drop_predicate":
+    if t in ("drop_predicate", "like_contains", "exact_match"):
         if d.kind != "value_literal":
             return None
-        return Rewrite("drop_predicate")
+        return Rewrite(t)
+    if t in DUPLICATE_REWRITES:
+        if d.kind != "duplicates" or len(d.readings) < 2:
+            return None
+        return Rewrite(d.readings[1].rewrite.type)  # the shape fixes which toggle applies
     return None
+
+
+DUPLICATE_REWRITES = ("add_distinct", "drop_distinct", "count_distinct", "count_all", "include_ties")
 
 
 def _find_column_site(table: str, column: str, pq: ParsedQuery, db: Database):
