@@ -17,6 +17,15 @@ from sqlglot import exp
 from .models import ColumnProfile
 
 
+def _qtable(name: str) -> exp.Table:
+    """A table reference with the identifier always quoted (BIRD has a table called `order`)."""
+    return exp.Table(this=exp.to_identifier(name, quoted=True))
+
+
+def _qcol(name: str) -> exp.Column:
+    return exp.Column(this=exp.to_identifier(name, quoted=True))
+
+
 @dataclass
 class Table:
     name: str
@@ -206,8 +215,8 @@ class Database:
         col = self.find_column(table, column)
         if not t or not col:
             return None
-        tbl = exp.to_table(t.name)
-        c = exp.column(col)
+        tbl = _qtable(t.name)
+        c = _qcol(col)
         d = self.dialect
         try:
             stats_sql = (
@@ -250,7 +259,7 @@ class Database:
         t = self.find_table(table)
         if not t:
             return [], []
-        sql = exp.select("*").from_(exp.to_table(t.name)).limit(n).sql(dialect=self.dialect)
+        sql = exp.select("*").from_(_qtable(t.name)).limit(n).sql(dialect=self.dialect)
         cols, rows, _ = self.execute(sql, timeout=30)
         return cols, rows
 

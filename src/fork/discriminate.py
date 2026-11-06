@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from sqlglot import exp
 
-from .db import Database
+from .db import Database, _qcol, _qtable
 from .models import Dependency, Evidence, Fork
 
 
 def discriminating_query(dep: Dependency, db: Database) -> tuple[str, str]:
     """Returns (sql, open_question)."""
     t = db.find_table(dep.table)
-    tbl = exp.to_table(t.name)
-    col = exp.column(dep.column)
+    tbl = _qtable(t.name)
+    col = _qcol(dep.column)
     d = db.dialect
     if dep.kind == "value_literal":
         values = _values_in_play(dep)
@@ -27,7 +27,7 @@ def discriminating_query(dep: Dependency, db: Database) -> tuple[str, str]:
             if other == dep.column or other in t.primary_key or len(selects) >= 8:
                 continue
             cls = _type_class(oty)
-            oc = exp.column(other)
+            oc = _qcol(other)
             if cls == "number":
                 selects.append(exp.Avg(this=oc).as_(f"avg_{_short(other)}"))
             elif cls == "date":
@@ -42,7 +42,7 @@ def discriminating_query(dep: Dependency, db: Database) -> tuple[str, str]:
         others = [r.rewrite.column for r in dep.alternatives if r.rewrite.column]
         selects = [exp.Count(this=exp.Star()).as_("n")]
         for o in others:
-            oc = exp.column(o)
+            oc = _qcol(o)
             selects.append(exp.Sum(this=exp.Case().when(exp.EQ(this=col, expression=oc), exp.Literal.number(1)).else_(exp.Literal.number(0))).as_(f"same_as_{_short(o)}"))
             selects.append(exp.Count(this=exp.Distinct(expressions=[oc])).as_(f"distinct_{_short(o)}"))
         selects.append(exp.Count(this=exp.Distinct(expressions=[col])).as_(f"distinct_{_short(dep.column)}"))
