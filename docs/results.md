@@ -160,3 +160,34 @@ The 50-fork sheet from run 5, labelled by hand. Scored with `eval/bird/labels.py
 The judge is calibrated: it is a little stricter than the human and disagrees on two forks (a DISTINCT on badge dates, 'Business' covering 'Business Administration'), both of which the human called plausible. The blue-eyes fork, which the run-4 and run-5 notes flagged as one a reviewer might want, the human rejected too.
 
 The human noise rate sits exactly on the plan's one-third bar. The seven rejected forks on correct answers: two tie expansions on "7th highest" and "333rd highest" questions, where the agent's `LIMIT 1 OFFSET n` is a rank and tied rows are not a reading; one DISTINCT on a surname list; two value readings (blue eyes, loan status set); one column substitution (`totalSetSize` vs `baseSetSize`); one cross-table id reading. On wrong answers, five of the eight rejections are duplicates readings that count joined attribute records instead of distinct players, or add DISTINCT to a list the question did not ask to de-duplicate.
+
+## Run 6, 6 Nov 2026 (label-driven fixes, prior floor 0.25)
+
+Two changes from the human labels: no tie expansion on `LIMIT 1 OFFSET n` (a rank, not a superlative), and no record-counting alternative for `COUNT(DISTINCT <id column>)`.
+
+| metric | value |
+|---|---|
+| flip rate | 14.7% (44/299) |
+| flip rate on wrong answers | 18.4% |
+| flip rate on right answers | 12.4% |
+| catch rate, strict | 7.0% (8/114) |
+| catch rate, loose | 8.8% |
+| noise rate, LLM judge | 34.8% (8/23) |
+| noise rate, human labels carried over from run 5 (19 of the 23 forks on correct answers matched) | 26% (5/19) |
+| judge agrees with the human on those 19 | 17/19 |
+| forks by kind | value_literal 20, column_choice 13, duplicates 15 |
+
+The two catches lost against run 5 were `COUNT(DISTINCT id)` to `COUNT(id)` on questions where BIRD's gold counts joined records; the human labelled that reading implausible, so they were never real catches.
+
+Run-to-run variance: runs 5 and 6 share the code for every question without an OFFSET tie or an id count, and the proposer still moved the flip rate by about two points. On 299 questions the standard error of a 15% rate is 2.1 points. The flip rate at the default floor is 15% give or take 2; the full 1534-question set would bring that to under one point.
+
+### Summary across runs (299-question sample)
+
+| run | change | floor | flip | noise (judge) | noise (human) | catch strict |
+|---|---|---|---|---|---|---|
+| 1 | first measurement | 0.15 | 14.4% | 50% | | 1.8% |
+| 2 | tuned proposer, date columns, dropped filters | 0.20 | 13.0% | 42% | | 3.5% |
+| 3 | duplicates kind, both DISTINCT directions | 0.20 | 30.8% | 57% | | 13.2% |
+| 4 | no DISTINCT removal, same-row ties collapse | 0.20 | 24.4% | 46% | | 9.6% |
+| 5 | run 4 code at floor 0.25 | 0.25 | 17.1% | 38% | 33% (7/21) | 8.8% |
+| 6 | no OFFSET ties, no id record counts | 0.25 | 14.7% | 35% | 26% (5/19) | 7.0% |
