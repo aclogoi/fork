@@ -144,3 +144,19 @@ Across runs 2 to 5 the duplicates kind moved strict catch from 4 to 10 wrong ans
 | 3 | duplicates kind, both DISTINCT directions | 0.20 | 30.8% | 57% | 13.2% |
 | 4 | no DISTINCT removal, same-row ties collapse | 0.20 | 24.4% | 46% | 9.6% |
 | 5 | run 4 code at floor 0.25 | 0.25 | 17.1% | 38% | 8.8% |
+
+### Human labels, run 5 (6 Nov 2026)
+
+The 50-fork sheet from run 5, labelled by hand. Scored with `eval/bird/labels.py`.
+
+| metric | value |
+|---|---|
+| human noise rate (forks on correct answers) | 33% (7/21) |
+| LLM judge noise on the same 21 forks | 43% (9/21) |
+| judge agrees with the human | 19/21 |
+| forks on wrong answers called plausible | 21/29 |
+| implausible by kind, all 50 | value_literal 4/19, column_choice 2/10, duplicates 9/21 |
+
+The judge is calibrated: it is a little stricter than the human and disagrees on two forks (a DISTINCT on badge dates, 'Business' covering 'Business Administration'), both of which the human called plausible. The blue-eyes fork, which the run-4 and run-5 notes flagged as one a reviewer might want, the human rejected too.
+
+The human noise rate sits exactly on the plan's one-third bar. The seven rejected forks on correct answers: two tie expansions on "7th highest" and "333rd highest" questions, where the agent's `LIMIT 1 OFFSET n` is a rank and tied rows are not a reading; one DISTINCT on a surname list; two value readings (blue eyes, loan status set); one column substitution (`totalSetSize` vs `baseSetSize`); one cross-table id reading. On wrong answers, five of the eight rejections are duplicates readings that count joined attribute records instead of distinct players, or add DISTINCT to a list the question did not ask to de-duplicate.
