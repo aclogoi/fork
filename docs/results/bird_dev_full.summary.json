@@ -1,0 +1,34 @@
+{
+ "questions_run": 1530,
+ "usable": 1529,
+ "baseline_accuracy": 0.591,
+ "flip_rate": 0.135,
+ "flip_rate_on_wrong": 0.179,
+ "flip_rate_on_right": 0.105,
+ "catch_rate": 0.027,
+ "catch_rate_loose": 0.053,
+ "wrong_by_mismatch": {
+  "values": 269,
+  "column_count": 184,
+  "row_count": 134,
+  "baseline_empty": 38
+ },
+ "catch_rate_on_value_mismatch": 0.042,
+ "catch_rate_loose_on_value_mismatch": 0.072,
+ "noise_rate_llm_judge": 0.29,
+ "forks_judged_on_right": 100,
+ "forks_on_right": 100,
+ "mean_dependencies": 0.31,
+ "mean_elapsed_s": 1.69,
+ "excluded": {
+  "check_error": 0,
+  "baseline_sql_error": 0,
+  "gold_error": 1
+ },
+ "fork_kinds": {
+  "duplicates": 69,
+  "value_literal": 78,
+  "column_choice": 67,
+  "null_handling": 3
+ }
+}

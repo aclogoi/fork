@@ -82,7 +82,17 @@ exposes one tool, `check_sql(question, sql)`, that returns the report as markdow
 
 ## Evaluation on BIRD
 
-BIRD ships an "evidence" hint per question precisely because its columns are ambiguous. The evaluation strips it, runs a simple baseline agent, then runs Fork over the agent's SQL. See `eval/bird/` and `docs/eval.md`.
+BIRD ships an "evidence" hint per question precisely because its columns are ambiguous. The evaluation strips it, runs a simple baseline agent, then runs Fork over the agent's SQL. See `eval/bird/` and `docs/eval.md`; every measurement is logged in `docs/results.md`.
+
+On the full BIRD dev set (1529 usable questions, evidence stripped, baseline agent at 59% accuracy):
+
+| metric | value |
+|---|---|
+| questions whose answer flips under a plausible alternative reading | 13.5% (207/1529), standard error 0.9 |
+| of those flips on right answers, share a judge calls implausible | 29% (human labels on a subsample: 28%) |
+| wrong answers where a fork's other branch is the gold answer | 2.7% |
+
+About one in seven questions carries a choice the agent made silently. Ambiguity is a property of the schema, not the agent: on the three databases with coded columns and multi-valued cells (card_games, thrombosis_prediction, california_schools) it is one in four or five, on the cleanest ones one in twenty to fifty. The catch rate is low because it measures agreement with BIRD's gold query, which itself takes arbitrary readings that live in the stripped evidence; the human-labelled forks on wrong answers were mostly judged plausible.
 
 ## Scope of v0
 
