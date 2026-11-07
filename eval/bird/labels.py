@@ -24,8 +24,16 @@ def parse_label(v: str) -> bool | None:
     return None
 
 
+def _bool(v: str) -> bool | None:
+    """Spreadsheets rewrite True/False as TRUE/FALSE, 1/0 or yes/no on save."""
+    return parse_label(v)
+
+
 def main(path: str) -> None:
     rows = list(csv.DictReader(open(path)))
+    for r in rows:
+        r["baseline_correct"] = {True: "True", False: "False"}.get(_bool(r["baseline_correct"]), r["baseline_correct"])
+        r["llm_judge"] = {True: "True", False: "False"}.get(_bool(r["llm_judge"]), r["llm_judge"])
     labelled = [(r, parse_label(r["human_plausible"])) for r in rows]
     done = [(r, h) for r, h in labelled if h is not None]
     print(f"{len(rows)} forks, {len(done)} labelled")
