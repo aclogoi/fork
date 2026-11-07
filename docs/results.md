@@ -191,3 +191,47 @@ Run-to-run variance: runs 5 and 6 share the code for every question without an O
 | 4 | no DISTINCT removal, same-row ties collapse | 0.20 | 24.4% | 46% | | 9.6% |
 | 5 | run 4 code at floor 0.25 | 0.25 | 17.1% | 38% | 33% (7/21) | 8.8% |
 | 6 | no OFFSET ties, no id record counts | 0.25 | 14.7% | 35% | 26% (5/19) | 7.0% |
+
+## Full BIRD dev set, 6 Nov 2026 (run-6 code, prior floor 0.25)
+
+All 1534 dev questions, evidence stripped. Baseline agent produced SQL for 1530 (4 refused or returned nothing); one gold query timed out at 60 s; 1529 usable. Baseline accuracy 59.1%. Outputs in `eval/bird/out/run_all.*`.
+
+| metric | value |
+|---|---|
+| flip rate | 13.5% (207/1529), standard error 0.9 points |
+| flip rate on wrong answers | 17.9% |
+| flip rate on right answers | 10.5% |
+| catch rate, strict | 2.7% (17/625) |
+| catch rate, loose | 5.3% |
+| noise rate, LLM judge | 29% (29/100) |
+| noise rate, human labels carried over from the run-5 sheet (18 forks matched) | 28% (5/18) |
+| forks by kind | value_literal 78, duplicates 69, column_choice 67, null_handling 3 |
+| dependencies surviving the LLM gate, mean per question | 0.31 |
+| mean check time | 1.7 s |
+
+Against the plan's thresholds: noise passes, flip rate does not reach 15%. The 299-question sample ran high (14.7 to 17.1% across runs 5 and 6); the full set settles at 13.5, give or take 0.9.
+
+By difficulty: simple 12%, moderate 18%, challenging 9%. By database: card_games 25%, thrombosis_prediction 22%, california_schools 20%, financial 15%, codebase_community 14%, superhero 11%, formula_1 10%, european_football_2 9%, student_club 8%, toxicology 5%, debit_card_specializing 2%. Ambiguity is a property of the schema: the three databases with coded columns and multi-valued cells carry most of it.
+
+Flip and judged noise by reading on the full set:
+
+| reading | flip | judge noise |
+|---|---|---|
+| value literal (all) | 5.1% | 30% (10/33) |
+| column choice | 4.3% | 23% (7/31) |
+| duplicates (all) | 4.5% | 34% (12/35) |
+| added DISTINCT only | | 39% (11/28) |
+| LIKE-contains only | | 58% (7/12) |
+
+The added-DISTINCT and LIKE-contains readings are the two noisiest; without them flip would be 8.8% at 18% noise. They also supply 4 of the 17 strict catches.
+
+Prior floor sweep on the full run (alternatives below 0.25 were never generated, so only upward):
+
+| floor | flip | judge noise |
+|---|---|---|
+| 0.25 | 13.5% | 29% |
+| 0.30 | 10.2% | 19% |
+| 0.35 | 7.2% | 16% |
+| 0.40 | 4.9% | 12% |
+
+Strict catch fell from 7% on the sample to 2.7% on the full set. Of 625 wrong answers, 184 differ from gold by column count and 38 return nothing; the 403 with the right shape are the only ones a reading can recover, and Fork recovers 4%. The write-up should say that the catch rate measures agreement with BIRD's gold, which itself takes arbitrary readings (thresholds in the stripped evidence, DISTINCT or not), not whether the fork pointed at a real choice.
