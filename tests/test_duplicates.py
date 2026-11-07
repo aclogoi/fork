@@ -71,3 +71,16 @@ def test_ties_that_repeat_the_same_row_do_not_fork(loans_conn):
                    "SELECT status FROM loans WHERE status = 'C' ORDER BY current_balance LIMIT 1", loans_conn, llm="none")
     ties = [d for d in r.dependencies if d.readings[1].rewrite.type == "include_ties"]
     assert ties and ties[0] in r.collapsed
+
+
+def test_ranked_offset_is_not_a_tie_dependency(loans_conn):
+    r = fork.check("Which loan has the 3rd smallest balance?",
+                   "SELECT loan_id FROM loans ORDER BY current_balance LIMIT 1 OFFSET 2", loans_conn, llm="none")
+    assert not any(rd.rewrite.type == "include_ties" for d in r.dependencies for rd in d.alternatives)
+
+
+def test_count_distinct_id_is_not_a_dependency(loans_conn):
+    r = fork.check("How many customers have loans?", "SELECT COUNT(DISTINCT customer_id) FROM loans", loans_conn, llm="none")
+    assert not any(rd.rewrite.type == "count_all" for d in r.dependencies for rd in d.alternatives)
+    r = fork.check("How many regions?", "SELECT COUNT(DISTINCT region) FROM loans", loans_conn, llm="none")
+    assert any(rd.rewrite.type == "count_all" for d in r.dependencies for rd in d.alternatives)

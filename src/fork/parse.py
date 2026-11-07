@@ -292,7 +292,8 @@ def duplicate_sites(pq: ParsedQuery, db: Database) -> list[DupSite]:
             if not (_projects_primary_key(resolved, db) and not joined):
                 out.append(DupSite(0, "select_plain", t, c, f"SELECT {proj_text} (no DISTINCT)"))
         limit = root.args.get("limit")
-        if root.args.get("order") is not None and isinstance(limit, exp.Limit) and limit.expression.sql() == "1":
+        # LIMIT 1 OFFSET n is a rank ("7th highest"); rows tied at a rank are not a reading
+        if root.args.get("order") is not None and isinstance(limit, exp.Limit) and limit.expression.sql() == "1" and root.args.get("offset") is None:
             order_text = ", ".join(o.sql(dialect=db.dialect) for o in root.args["order"].expressions)[:80]
             out.append(DupSite(0, "limit_one", t, c, f"ORDER BY {order_text} LIMIT 1"))
     for i, node in enumerate(pq.nodes):
@@ -301,7 +302,9 @@ def duplicate_sites(pq: ParsedQuery, db: Database) -> list[DupSite]:
         inner = node.this
         if isinstance(inner, exp.Distinct) and len(inner.expressions) == 1 and isinstance(inner.expressions[0], exp.Column):
             r = resolve(inner.expressions[0], pq, db)
-            if r:
+            # COUNT(DISTINCT <id>) counts entities; counting their joined records instead is
+            # not a reading of "how many players" (human labels, BIRD run 5)
+            if r and not _is_key(r[0], r[1], db):
                 out.append(DupSite(i, "count_distinct", r[0], r[1], f"COUNT(DISTINCT {r[1]})"))
         elif isinstance(inner, exp.Column) and not isinstance(inner.this, exp.Star):
             r = resolve(inner, pq, db)
@@ -324,6 +327,13 @@ def _proj_text(e: exp.Expression, dialect: str) -> str:
 def _projection_column(e: exp.Expression) -> exp.Column | None:
     inner = e.this if isinstance(e, exp.Alias) else e
     return inner if isinstance(inner, exp.Column) else None
+
+
+def _is_key(table: str, column: str, db: Database) -> bool:
+    tab = db.find_table(table)
+    if tab is None:
+        return column.lower().endswith("id")
+    return column in tab.primary_key or any(column == fk[0] for fk in tab.foreign_keys) or column.lower().endswith("id")
 
 
 def _projects_primary_key(resolved: list[tuple[str, str]], db: Database) -> bool:
